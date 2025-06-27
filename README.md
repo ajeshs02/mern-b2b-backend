@@ -54,7 +54,7 @@ server/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/yourusername/mern-b2b-backend.git
+git clone https://github.com/ajeshs02/mern-b2b-backend.git .
 cd mern-b2b-backend
 ```
 
