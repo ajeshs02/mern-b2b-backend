@@ -53,6 +53,10 @@ app.use(`${BASE_PATH}/member`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}/project`, isAuthenticated, projectRoutes);
 app.use(`${BASE_PATH}/task`, isAuthenticated, taskRoutes);
 
+app.get("/healthz", (req, res) => {
+  res.status(200).send("OK");
+});
+
 app.use(
   `${BASE_PATH}/*`,
   asyncHandler(async (req, res) => {
