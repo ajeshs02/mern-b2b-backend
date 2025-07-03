@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Copy source code
+# Copy source code 
 COPY . .
 
 # Build Typescript
@@ -21,7 +21,7 @@ RUN npm run build
 # Set working directory
 WORKDIR /app
 
-# Install SSL certificates for MongoDB TLS (as when running builded image, its failing to connect to MongoDB atlas)
+# Install SSL certificates for MongoDB TLS 
 RUN apk add --no-cache ca-certificates
 
 # Copy compiled app and package files from builder
