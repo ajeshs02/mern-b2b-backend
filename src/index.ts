@@ -21,6 +21,9 @@ const app = express();
 
 const BASE_PATH = config.BASE_PATH;
 
+// allow reverse proxy (to fix render authentication issue)
+app.set("trust proxy", 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
