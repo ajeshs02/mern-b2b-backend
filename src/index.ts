@@ -39,7 +39,11 @@ app.use(
     secure: config.NODE_ENV === "production",
     httpOnly: true,
     sameSite: config.NODE_ENV === "production" ? "none" : "lax",
-    domain: config.NODE_ENV === "production" ? ".onrender.com" : undefined,
+    // Add these for cross-origin cookies:
+    ...(config.NODE_ENV === "production" && {
+      domain: ".onrender.com",
+      path: "/",
+    }),
   })
 );
 
