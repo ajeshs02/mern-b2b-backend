@@ -16,6 +16,8 @@ import workspaceRoutes from "./routes/workspace.route";
 import memberRoutes from "./routes/member.route";
 import projectRoutes from "./routes/project.route";
 import taskRoutes from "./routes/task.route";
+import responseLogger from "./middlewares/responseLogger.middleware";
+import logger from "./utils/logger";
 
 const app = express();
 
@@ -26,6 +28,9 @@ app.set("trust proxy", 1);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Add response logging middleware
+app.use(responseLogger);
 
 app.use(
   cors({
@@ -69,6 +74,7 @@ app.use(
 app.use(errorHandler);
 
 app.listen(config.PORT, async () => {
-  console.log(`Server listening on port ${config.PORT} in ${config.NODE_ENV}`);
+  // console.log(`Server listening on port ${config.PORT} in ${config.NODE_ENV}`);
+  logger.info(`Server listening on port ${config.PORT} in ${config.NODE_ENV}`);
   await connectDatabase();
 });
