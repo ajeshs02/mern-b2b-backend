@@ -15,6 +15,13 @@ const appConfig = () => ({
 
   FRONTEND_ORIGIN: getEnv("FRONTEND_ORIGIN", "localhost"),
   FRONTEND_GOOGLE_CALLBACK_URL: getEnv("FRONTEND_GOOGLE_CALLBACK_URL"),
+
+  // redis
+  REDIS_HOST: getEnv("REDIS_HOST", "127.0.0.1"),
+  REDIS_PORT: getEnv("REDIS_PORT", "6379"),
+  REDIS_PASSWORD: getEnv("REDIS_PASSWORD"),
+  REDIS_TTL: getEnv("REDIS_TTL", "600"),
+  REDIS_TLS: getEnv("REDIS_TLS", "false"),
 });
 
 export const config = appConfig();

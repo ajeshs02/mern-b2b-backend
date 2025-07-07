@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { NextFunction, Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import session from "cookie-session";
 import { config } from "./config/app.config";
@@ -18,6 +18,8 @@ import projectRoutes from "./routes/project.route";
 import taskRoutes from "./routes/task.route";
 import responseLogger from "./middlewares/responseLogger.middleware";
 import logger from "./utils/logger";
+import globalCache from "./middlewares/globalCache.middleware";
+import { connectRedis, disconnectRedis } from "./lib/redis.client";
 
 const app = express();
 
@@ -53,6 +55,9 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Add global cache
+app.use(globalCache);
+
 app.use(`${BASE_PATH}/auth`, authRoutes);
 app.use(`${BASE_PATH}/user`, isAuthenticated, userRoutes);
 app.use(`${BASE_PATH}/workspace`, isAuthenticated, workspaceRoutes);
@@ -73,8 +78,35 @@ app.use(
 
 app.use(errorHandler);
 
-app.listen(config.PORT, async () => {
-  // console.log(`Server listening on port ${config.PORT} in ${config.NODE_ENV}`);
-  logger.info(`Server listening on port ${config.PORT} in ${config.NODE_ENV}`);
-  await connectDatabase();
-});
+(async () => {
+  try {
+    // Connect to MongoDB
+    await connectDatabase();
+
+    // Connect to Redis
+    await connectRedis();
+
+    // Start Express server
+    const server = app.listen(config.PORT, () => {
+      console.log(
+        `🚀 Server running on port ${config.PORT} in ${config.NODE_ENV}`
+      );
+    });
+
+    // Graceful shutdown
+    const shutdown = async () => {
+      console.log("🛑 Shutting down...");
+      await disconnectRedis();
+      server.close(() => {
+        console.log("🌙 Server closed");
+        process.exit(0);
+      });
+    };
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+  } catch (err) {
+    console.error("❌ Failed to start server:", err);
+    process.exit(1);
+  }
+})();

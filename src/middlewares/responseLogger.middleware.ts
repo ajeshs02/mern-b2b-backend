@@ -18,10 +18,10 @@ const responseLogger = (req: Request, res: Response, next: NextFunction) => {
         method: req.method, // GET, POST, etc.
         url: req.originalUrl, // Full URL
         params: req.params, // Route params
-        query: req.query, // Query string
+        // query: req.query, // Query string
         body: redactSensitiveData(req.body), // Request payload (redacted)
-        headers: req.headers, // Request headers
-        ip: req.ip, // Client IP
+        // headers: req.headers, // Request headers
+        // ip: req.ip, // Client IP
       },
       response: {
         statusCode: res.statusCode, // HTTP status

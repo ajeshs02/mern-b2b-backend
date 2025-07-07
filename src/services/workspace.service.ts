@@ -70,7 +70,9 @@ export const getAllWorkspacesUserIsMemberService = async (userId: string) => {
   // Extract workspace details from memberships
   const workspaces = memberships.map((membership) => membership.workspaceId);
 
-  return { workspaces };
+  const result = { workspaces };
+
+  return result;
 };
 
 export const getWorkspaceByIdService = async (workspaceId: string) => {
