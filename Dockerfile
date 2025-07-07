@@ -1,9 +1,6 @@
 # ---------- Build Stage ----------
   FROM node:20-alpine3.19 AS builder
 
-# Fix DNS resolution issues in Alpine
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf
-
 # Set working directory
 WORKDIR /app
 
@@ -21,8 +18,6 @@ RUN npm run build
 # ---------- Production Stage ----------
   FROM node:20-alpine3.19
 
-# Fix DNS resolution issues in Alpine
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 # Set working directory
 WORKDIR /app
