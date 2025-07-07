@@ -21,8 +21,8 @@ RUN npm run build
 # Set working directory
 WORKDIR /app
 
-# Install SSL certificates for MongoDB TLS 
-RUN apk add --no-cache ca-certificates
+# Install SSL certificates for MongoDB & Redis Cloud TLS
+RUN apk add --no-cache ca-certificates openssl
 
 # Copy compiled app and package files from builder
 COPY  --from=builder /app/dist ./dist
