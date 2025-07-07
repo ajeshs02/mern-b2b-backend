@@ -1,6 +1,7 @@
 import Redis, { RedisOptions } from "ioredis";
 import { redisConfig } from "../config/redis.config";
 import logger from "../utils/logger";
+import dns from "dns";
 
 export const redisOptions: RedisOptions = {
   host: redisConfig.host,
@@ -41,17 +42,25 @@ export default redis;
 // Explicit connection function
 export const connectRedis = async (): Promise<void> => {
   try {
+    logger.info("🌐 Performing DNS lookup for Redis host...");
+    dns.lookup(redisConfig.host, (err, address, family) => {
+      if (err) {
+        logger.error(
+          `❌ DNS Lookup Failed for ${redisConfig.host}: ${err.message}`
+        );
+      } else {
+        logger.info(`🌐 DNS Lookup Success: ${address} (IPv${family})`);
+      }
+    });
+
     await redis.connect();
-    // Test the connection
     await redis.ping();
     logger.info("🚀 Redis connection established and tested");
   } catch (error) {
-    logger.error("❌ Failed to connect to Redis:", error);
-    throw error;
+    logger.error("❌ Redis unavailable. Continuing without Redis.");
   }
 };
 
-// Graceful shutdown
 export const disconnectRedis = async (): Promise<void> => {
   try {
     await redis.quit();
