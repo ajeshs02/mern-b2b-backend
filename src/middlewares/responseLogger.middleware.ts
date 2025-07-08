@@ -19,13 +19,13 @@ const responseLogger = (req: Request, res: Response, next: NextFunction) => {
         url: req.originalUrl, // Full URL
         params: req.params, // Route params
         // query: req.query, // Query string
-        body: redactSensitiveData(req.body), // Request payload (redacted)
+        // body: redactSensitiveData(req.body), // Request payload (redacted)
         // headers: req.headers, // Request headers
         // ip: req.ip, // Client IP
       },
       response: {
         statusCode: res.statusCode, // HTTP status
-        body: redactSensitiveData(body), // Response payload (redacted)
+        // body: redactSensitiveData(body), // Response payload (redacted)
         duration: `${duration}s`, // Time taken to process request
       },
     });

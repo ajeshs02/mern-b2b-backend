@@ -17,7 +17,7 @@ const appConfig = () => ({
   FRONTEND_GOOGLE_CALLBACK_URL: getEnv("FRONTEND_GOOGLE_CALLBACK_URL"),
 
   // redis
-  UPSTASH_REDIS_REST_URL: getEnv("UPSTASH_REDIS_REST_URL"),
+  REDIS_URL: getEnv("REDIS_URL"),
   REDIS_TTL: getEnv("REDIS_TTL", "600"),
 });
 

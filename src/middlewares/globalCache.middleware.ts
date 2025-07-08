@@ -91,7 +91,8 @@ const globalCache = async (
 
     // Clear cache on mutations (POST, PUT, DELETE, PATCH)
     if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
-      await redis.flushdb();
+      logger.info(`${method} detected: clearing cache`);
+      await redis.flushDb();
       logger.info(`🔥 Redis cache FLUSHED due to ${method} ${req.originalUrl}`);
     }
   } catch (err) {

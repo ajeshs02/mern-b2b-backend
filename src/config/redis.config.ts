@@ -4,7 +4,7 @@ export const redisConfig = {
   /**
    * Full Upstash Redis URL (rediss://default:<token>@<db>.upstash.io:6379)
    */
-  url: config.UPSTASH_REDIS_REST_URL,
+  url: config.REDIS_URL,
   /**
    * TTL for cached keys (default to 300 seconds if not set)
    */
