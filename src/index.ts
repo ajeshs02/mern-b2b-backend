@@ -88,7 +88,7 @@ app.use(errorHandler);
 
     // Start Express server
     const server = app.listen(config.PORT, () => {
-      console.log(
+      logger.info(
         `🚀 Server running on port ${config.PORT} in ${config.NODE_ENV}`
       );
     });

@@ -6,4 +6,5 @@ export const redisConfig = {
   password: config.REDIS_PASSWORD || undefined,
   ttl: parseInt(config.REDIS_TTL, 10),
   tls: config.REDIS_TLS === "true",
+  username: "default",
 };

@@ -1,69 +1,69 @@
-import Redis, { RedisOptions } from "ioredis";
+import { createClient } from "redis";
 import { redisConfig } from "../config/redis.config";
 import logger from "../utils/logger";
 import dns from "dns";
 
-export const redisOptions: RedisOptions = {
-  host: redisConfig.host,
-  port: redisConfig.port,
-  password: redisConfig.password,
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    logger.info(`Redis reconnecting in ${delay}ms...`);
-    return delay;
-  },
-  maxRetriesPerRequest: null,
-  enableReadyCheck: true,
-  lazyConnect: true, // Important: Don't auto-connect
-  tls: redisConfig.tls ? {} : undefined,
-};
+// Build connection URL (rediss:// enables TLS automatically)
+const redisUrl = redisConfig.tls
+  ? `rediss://${redisConfig.username}:${redisConfig.password}@${redisConfig.host}:${redisConfig.port}`
+  : `redis://${redisConfig.host}:${redisConfig.port}`;
 
-const redis = new Redis(redisOptions);
-
-redis.on("connect", () => {
-  logger.info(`✅ Redis connected to ${redisConfig.host}:${redisConfig.port}`);
+const client = createClient({
+  url: redisUrl,
 });
 
-redis.on("ready", () => {
-  logger.info("✅ Redis client ready to use");
+client.on("connect", () => {
+  logger.info(`✅ Redis connecting to ${redisUrl}...`);
 });
 
-redis.on("error", (err) => {
+client.on("ready", () => {
+  logger.info("🚀 Redis client ready to use");
+});
+
+client.on("error", (err) => {
   logger.error(`❌ Redis client error: ${err.message}`);
 });
 
-redis.on("end", () => {
-  logger.info("🔌 Redis connection closed");
+client.on("end", () => {
+  logger.warn("🔌 Redis connection closed");
 });
 
-// Export both the client and connection function
-export default redis;
+export default client;
 
-// Explicit connection function
 export const connectRedis = async (): Promise<void> => {
   try {
     logger.info("🌐 Performing DNS lookup for Redis host...");
-    dns.lookup(redisConfig.host, (err, address, family) => {
+    dns.lookup(redisConfig.host, { family: 4 }, (err, address, family) => {
       if (err) {
-        logger.error(
-          `❌ DNS Lookup Failed for ${redisConfig.host}: ${err.message}`
-        );
+        logger.error(`❌ DNS Lookup Failed: ${err.message}`);
       } else {
         logger.info(`🌐 DNS Lookup Success: ${address} (IPv${family})`);
       }
     });
 
-    await redis.connect();
-    await redis.ping();
-    logger.info("🚀 Redis connection established and tested");
+    await client.connect();
+
+    if (client.isReady) {
+      logger.info("✅ Redis connection established and ready");
+    } else {
+      logger.warn("⚠️ Redis client is not ready after connect()");
+    }
+
+    // Test SET/GET
+    await client.set("test:connection", "success");
+    const result = await client.get("test:connection");
+    logger.info(`📝 Redis test key value: ${result}`);
   } catch (error) {
-    logger.error("❌ Redis unavailable. Continuing without Redis.");
+    logger.error(
+      "❌ Failed to connect to Redis. Continuing without Redis.",
+      error
+    );
   }
 };
 
 export const disconnectRedis = async (): Promise<void> => {
   try {
-    await redis.quit();
+    await client.quit();
     logger.info("🔌 Redis disconnected gracefully");
   } catch (error) {
     logger.error("❌ Error disconnecting Redis:", error);

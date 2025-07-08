@@ -81,12 +81,7 @@ const globalCache = async (
 
         // Cache only successful responses (2xx)
         if (statusCode >= 200 && statusCode < 300) {
-          redis.set(
-            cacheKey,
-            JSON.stringify({ status: statusCode, body }),
-            "EX",
-            redisConfig.ttl
-          );
+          redis.set(cacheKey, JSON.stringify({ status: statusCode, body }));
           logger.info(`✅ Cache SET: ${cacheKey} (${statusCode})`);
         }
 
