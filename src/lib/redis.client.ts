@@ -1,19 +1,14 @@
 import { createClient } from "redis";
 import { redisConfig } from "../config/redis.config";
 import logger from "../utils/logger";
-import dns from "dns";
 
-// Build connection URL (rediss:// enables TLS automatically)
-const redisUrl = redisConfig.tls
-  ? `rediss://${redisConfig.username}:${redisConfig.password}@${redisConfig.host}:${redisConfig.port}`
-  : `redis://${redisConfig.host}:${redisConfig.port}`;
-
+// Create Redis client with Upstash URL
 const client = createClient({
-  url: redisUrl,
+  url: redisConfig.url,
 });
 
 client.on("connect", () => {
-  logger.info(`✅ Redis connecting to ${redisUrl}...`);
+  logger.info(`✅ Redis connecting to ${redisConfig.url}...`);
 });
 
 client.on("ready", () => {
@@ -32,15 +27,6 @@ export default client;
 
 export const connectRedis = async (): Promise<void> => {
   try {
-    logger.info("🌐 Performing DNS lookup for Redis host...");
-    dns.lookup(redisConfig.host, { family: 4 }, (err, address, family) => {
-      if (err) {
-        logger.error(`❌ DNS Lookup Failed: ${err.message}`);
-      } else {
-        logger.info(`🌐 DNS Lookup Success: ${address} (IPv${family})`);
-      }
-    });
-
     await client.connect();
 
     if (client.isReady) {
@@ -54,10 +40,7 @@ export const connectRedis = async (): Promise<void> => {
     const result = await client.get("test:connection");
     logger.info(`📝 Redis test key value: ${result}`);
   } catch (error) {
-    logger.error(
-      "❌ Failed to connect to Redis. Continuing without Redis.",
-      error
-    );
+    logger.error("❌ Failed to connect to Upstash Redis:", error);
   }
 };
 

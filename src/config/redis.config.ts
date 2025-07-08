@@ -1,10 +1,12 @@
 import { config } from "./app.config";
 
 export const redisConfig = {
-  host: config.REDIS_HOST,
-  port: parseInt(config.REDIS_PORT, 10),
-  password: config.REDIS_PASSWORD || undefined,
-  ttl: parseInt(config.REDIS_TTL, 10),
-  tls: config.REDIS_TLS === "true",
-  username: "default",
+  /**
+   * Full Upstash Redis URL (rediss://default:<token>@<db>.upstash.io:6379)
+   */
+  url: config.UPSTASH_REDIS_REST_URL,
+  /**
+   * TTL for cached keys (default to 300 seconds if not set)
+   */
+  ttl: parseInt(config.REDIS_TTL, 10) || 300,
 };
