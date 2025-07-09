@@ -1,10 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import logger from "../utils/logger";
 import redis from "../lib/redis.client";
-import { redisConfig } from "../config/redis.config";
+import { config } from "../config/app.config";
+
+const BASE_PATH = config.BASE_PATH;
 
 // List of route prefixes to skip caching (e.g., auth, )
-const SKIP_CACHE_PATHS = ["/api/auth"];
+const SKIP_CACHE_PATHS = [`${BASE_PATH}/auth`, `${BASE_PATH}/user`];
 
 /**
  * CachedResponse defines the structure of the data stored in Redis.
@@ -18,9 +20,9 @@ interface CachedResponse {
  * Global Cache Middleware
  * ----------------------------------------------------------------------------
  * Features:
- * ✅ Automatically caches all GET responses (status + body)
- * ✅ Adds 'X-Cache' header (HIT or MISS) for easy debugging
- * ✅ Flushes entire cache on any data mutation (POST, PUT, DELETE, PATCH)
+ * Automatically caches all GET responses (status + body)
+ * Adds 'X-Cache' header (HIT or MISS) for easy debugging
+ * Flushes entire cache on any data mutation (POST, PUT, DELETE, PATCH)
  *
  *
  * Why?
@@ -82,7 +84,7 @@ const globalCache = async (
         // Cache only successful responses (2xx)
         if (statusCode >= 200 && statusCode < 300) {
           redis.set(cacheKey, JSON.stringify({ status: statusCode, body }));
-          logger.info(`✅ Cache SET: ${cacheKey} (${statusCode})`);
+          logger.info(`Cache SET: ${cacheKey} (${statusCode})`);
         }
 
         return originalJson(body);

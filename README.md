@@ -23,7 +23,7 @@ This backend supports Google OAuth login, role-based permissions, session-based 
 
 - 🔐 Google Sign-In + Local Auth via Passport
 - 🏢 Create and manage multi-tenant workspaces
-- ✅ Full CRUD for Projects, Epics, Tasks
+- Full CRUD for Projects, Epics, Tasks
 - 👥 Role-based permissions: Owner, Admin, Member
 - ✉️ Invite members via email
 - 📊 Analytics endpoints (basic)

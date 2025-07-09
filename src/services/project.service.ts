@@ -1,8 +1,12 @@
 import mongoose from "mongoose";
-import ProjectModel from "../models/project.model";
-import TaskModel from "../models/task.model";
 import { NotFoundException } from "../utils/appError";
 import { TaskStatusEnum } from "../enums/task.enum";
+import { TaskRepository } from "../repositories/task.repository";
+import { ProjectRepository } from "../repositories/project.repository";
+
+// Instantiate repositories
+const projectRepo = new ProjectRepository();
+const taskRepo = new TaskRepository();
 
 export const createProjectService = async (
   userId: string,
@@ -13,15 +17,13 @@ export const createProjectService = async (
     description?: string;
   }
 ) => {
-  const project = new ProjectModel({
+  const project = await projectRepo.create({
     ...(body.emoji && { emoji: body.emoji }),
     name: body.name,
     description: body.description,
-    workspace: workspaceId,
-    createdBy: userId,
-  });
-
-  await project.save();
+    workspace: new mongoose.Types.ObjectId(workspaceId),
+    createdBy: new mongoose.Types.ObjectId(userId),
+  } as any);
 
   return { project };
 };
@@ -31,35 +33,21 @@ export const getProjectsInWorkspaceService = async (
   pageSize: number,
   pageNumber: number
 ) => {
-  // Step 1: Find all projects in the workspace
-
-  const totalCount = await ProjectModel.countDocuments({
-    workspace: workspaceId,
-  });
-
-  const skip = (pageNumber - 1) * pageSize;
-
-  const projects = await ProjectModel.find({
-    workspace: workspaceId,
-  })
-    .skip(skip)
-    .limit(pageSize)
-    .populate("createdBy", "_id name profilePicture -password")
-    .sort({ createdAt: -1 });
-
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  return { projects, totalCount, totalPages, skip };
+  return await projectRepo.findProjectsInWorkspace(
+    workspaceId,
+    pageSize,
+    pageNumber
+  );
 };
 
 export const getProjectByIdAndWorkspaceIdService = async (
   workspaceId: string,
   projectId: string
 ) => {
-  const project = await ProjectModel.findOne({
-    _id: projectId,
-    workspace: workspaceId,
-  }).select("_id emoji name description");
+  const project = await projectRepo.findByIdAndWorkspace(
+    workspaceId,
+    projectId
+  );
 
   if (!project) {
     throw new NotFoundException(
@@ -74,7 +62,7 @@ export const getProjectAnalyticsService = async (
   workspaceId: string,
   projectId: string
 ) => {
-  const project = await ProjectModel.findById(projectId);
+  const project = await projectRepo.findById(projectId);
 
   if (!project || project.workspace.toString() !== workspaceId.toString()) {
     throw new NotFoundException(
@@ -85,7 +73,7 @@ export const getProjectAnalyticsService = async (
   const currentDate = new Date();
 
   //USING Mongoose aggregate
-  const taskAnalytics = await TaskModel.aggregate([
+  const taskAnalytics = await taskRepo.aggregate([
     {
       $match: {
         project: new mongoose.Types.ObjectId(projectId),
@@ -98,21 +86,13 @@ export const getProjectAnalyticsService = async (
           {
             $match: {
               dueDate: { $lt: currentDate },
-              status: {
-                $ne: TaskStatusEnum.DONE,
-              },
+              status: { $ne: TaskStatusEnum.DONE },
             },
           },
-          {
-            $count: "count",
-          },
+          { $count: "count" },
         ],
         completedTasks: [
-          {
-            $match: {
-              status: TaskStatusEnum.DONE,
-            },
-          },
+          { $match: { status: TaskStatusEnum.DONE } },
           { $count: "count" },
         ],
       },
@@ -143,10 +123,10 @@ export const updateProjectService = async (
 ) => {
   const { name, emoji, description } = body;
 
-  const project = await ProjectModel.findOne({
-    _id: projectId,
-    workspace: workspaceId,
-  });
+  const project = await projectRepo.findByIdAndWorkspace(
+    workspaceId,
+    projectId
+  );
 
   if (!project) {
     throw new NotFoundException(
@@ -167,10 +147,10 @@ export const deleteProjectService = async (
   workspaceId: string,
   projectId: string
 ) => {
-  const project = await ProjectModel.findOne({
-    _id: projectId,
-    workspace: workspaceId,
-  });
+  const project = await projectRepo.findByIdAndWorkspace(
+    workspaceId,
+    projectId
+  );
 
   if (!project) {
     throw new NotFoundException(
@@ -179,10 +159,7 @@ export const deleteProjectService = async (
   }
 
   await project.deleteOne();
-
-  await TaskModel.deleteMany({
-    project: project._id,
-  });
+  await taskRepo.deleteTasksByWorkspace(workspaceId, null);
 
   return project;
 };

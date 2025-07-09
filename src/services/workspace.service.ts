@@ -1,13 +1,21 @@
 import mongoose from "mongoose";
 import { Roles } from "../enums/role.enum";
-import MemberModel from "../models/member.model";
-import RoleModel from "../models/roles-permission.model";
-import UserModel from "../models/user.model";
-import WorkspaceModel from "../models/workspace.model";
 import { BadRequestException, NotFoundException } from "../utils/appError";
-import TaskModel from "../models/task.model";
 import { TaskStatusEnum } from "../enums/task.enum";
-import ProjectModel from "../models/project.model";
+import { WorkspaceRepository } from "../repositories/workspace.repository";
+import { MemberRepository } from "../repositories/member.repository";
+import { RoleRepository } from "../repositories/role.repository";
+import { TaskRepository } from "../repositories/task.repository";
+import { ProjectRepository } from "../repositories/project.repository";
+import { UserRepository } from "../repositories/user.repository";
+
+// Instantiate repositories
+const workspaceRepo = new WorkspaceRepository();
+const memberRepo = new MemberRepository();
+const roleRepo = new RoleRepository();
+const userRepo = new UserRepository();
+const taskRepo = new TaskRepository();
+const projectRepo = new ProjectRepository();
 
 //********************************
 // CREATE NEW WORKSPACE
@@ -21,34 +29,25 @@ export const createWorkspaceService = async (
 ) => {
   const { name, description } = body;
 
-  const user = await UserModel.findById(userId);
+  const user = await userRepo.findById(userId);
 
   if (!user) {
     throw new NotFoundException("User not found");
   }
 
-  const ownerRole = await RoleModel.findOne({ name: Roles.OWNER });
+  const ownerRole = await roleRepo.findOne({ name: Roles.OWNER });
 
   if (!ownerRole) {
     throw new NotFoundException("Owner role not found");
   }
 
-  const workspace = new WorkspaceModel({
-    name: name,
-    description: description,
+  const workspace = await workspaceRepo.create({
+    name,
+    description,
     owner: user._id,
-  });
+  } as any);
 
-  await workspace.save();
-
-  const member = new MemberModel({
-    userId: user._id,
-    workspaceId: workspace._id,
-    role: ownerRole._id,
-    joinedAt: new Date(),
-  });
-
-  await member.save();
+  await memberRepo.addMemberToWorkspace(user._id, workspace._id, ownerRole._id);
 
   user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
   await user.save();
@@ -62,56 +61,34 @@ export const createWorkspaceService = async (
 // GET WORKSPACES USER IS A MEMBER
 //**************** **************/
 export const getAllWorkspacesUserIsMemberService = async (userId: string) => {
-  const memberships = await MemberModel.find({ userId })
-    .populate("workspaceId")
-    .select("-password")
-    .exec();
+  const memberships = await memberRepo.findWorkspacesForUser(userId);
 
-  // Extract workspace details from memberships
-  const workspaces = memberships.map((membership) => membership.workspaceId);
+  const workspaces = memberships.map(
+    (membership: any) => membership.workspaceId
+  );
 
-  const result = { workspaces };
-
-  return result;
+  return { workspaces };
 };
 
 export const getWorkspaceByIdService = async (workspaceId: string) => {
-  const workspace = await WorkspaceModel.findById(workspaceId);
+  const workspaceWithMembers = await workspaceRepo.findWorkspaceWithMembers(
+    workspaceId
+  );
 
-  if (!workspace) {
+  if (!workspaceWithMembers) {
     throw new NotFoundException("Workspace not found");
   }
 
-  const members = await MemberModel.find({
-    workspaceId,
-  }).populate("role");
-
-  const workspaceWithMembers = {
-    ...workspace.toObject(),
-    members,
-  };
-
-  return {
-    workspace: workspaceWithMembers,
-  };
+  return { workspace: workspaceWithMembers };
 };
 
 //********************************
 // GET ALL MEMEBERS IN WORKSPACE
 //**************** **************/
-
 export const getWorkspaceMembersService = async (workspaceId: string) => {
-  // Fetch all members of the workspace
+  const members = await memberRepo.findMembersWithUserAndRole(workspaceId);
 
-  const members = await MemberModel.find({
-    workspaceId,
-  })
-    .populate("userId", "name email profilePicture -password")
-    .populate("role", "name");
-
-  const roles = await RoleModel.find({}, { name: 1, _id: 1 })
-    .select("-permission")
-    .lean();
+  const roles = await roleRepo.findAll({}, { name: 1, _id: 1 });
 
   return { members, roles };
 };
@@ -119,28 +96,28 @@ export const getWorkspaceMembersService = async (workspaceId: string) => {
 export const getWorkspaceAnalyticsService = async (workspaceId: string) => {
   const currentDate = new Date();
 
-  const totalTasks = await TaskModel.countDocuments({
+  const totalTasks = await taskRepo.countTasks({
     workspace: workspaceId,
   });
 
-  const overdueTasks = await TaskModel.countDocuments({
+  const overdueTasks = await taskRepo.countTasks({
     workspace: workspaceId,
     dueDate: { $lt: currentDate },
     status: { $ne: TaskStatusEnum.DONE },
   });
 
-  const completedTasks = await TaskModel.countDocuments({
+  const completedTasks = await taskRepo.countTasks({
     workspace: workspaceId,
     status: TaskStatusEnum.DONE,
   });
 
-  const analytics = {
-    totalTasks,
-    overdueTasks,
-    completedTasks,
+  return {
+    analytics: {
+      totalTasks,
+      overdueTasks,
+      completedTasks,
+    },
   };
-
-  return { analytics };
 };
 
 export const changeMemberRoleService = async (
@@ -148,31 +125,28 @@ export const changeMemberRoleService = async (
   memberId: string,
   roleId: string
 ) => {
-  const workspace = await WorkspaceModel.findById(workspaceId);
+  const workspace = await workspaceRepo.findById(workspaceId);
   if (!workspace) {
     throw new NotFoundException("Workspace not found");
   }
 
-  const role = await RoleModel.findById(roleId);
+  const role = await roleRepo.findById(roleId);
   if (!role) {
     throw new NotFoundException("Role not found");
   }
 
-  const member = await MemberModel.findOne({
+  const member = await memberRepo.findOne({
     userId: memberId,
-    workspaceId: workspaceId,
+    workspaceId,
   });
-
   if (!member) {
-    throw new Error("Member not found in the workspace");
+    throw new NotFoundException("Member not found in the workspace");
   }
 
-  member.role = role;
+  member.role = role._id;
   await member.save();
 
-  return {
-    member,
-  };
+  return { member };
 };
 
 //********************************
@@ -183,7 +157,7 @@ export const updateWorkspaceByIdService = async (
   name: string,
   description?: string
 ) => {
-  const workspace = await WorkspaceModel.findById(workspaceId);
+  const workspace = await workspaceRepo.findById(workspaceId);
   if (!workspace) {
     throw new NotFoundException("Workspace not found");
   }
@@ -193,9 +167,7 @@ export const updateWorkspaceByIdService = async (
   workspace.description = description || workspace.description;
   await workspace.save();
 
-  return {
-    workspace,
-  };
+  return { workspace };
 };
 
 export const deleteWorkspaceService = async (
@@ -206,56 +178,46 @@ export const deleteWorkspaceService = async (
   session.startTransaction();
 
   try {
-    const workspace = await WorkspaceModel.findById(workspaceId).session(
-      session
-    );
+    // Fetch workspace
+    const workspace = await workspaceRepo.findById(workspaceId, session);
     if (!workspace) {
       throw new NotFoundException("Workspace not found");
     }
 
-    // Check if the user owns the workspace
+    // Check ownership
     if (workspace.owner.toString() !== userId) {
       throw new BadRequestException(
         "You are not authorized to delete this workspace"
       );
     }
 
-    const user = await UserModel.findById(userId).session(session);
+    // Fetch user
+    const user = await userRepo.findById(userId, session);
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    await ProjectModel.deleteMany({ workspace: workspace._id }).session(
-      session
-    );
-    await TaskModel.deleteMany({ workspace: workspace._id }).session(session);
+    // Delete all related entities
+    await projectRepo.deleteProjectsByWorkspace(workspaceId, session);
+    await taskRepo.deleteTasksByWorkspace(workspaceId, session);
+    await memberRepo.deleteMany({ workspaceId }, session);
 
-    await MemberModel.deleteMany({
-      workspaceId: workspace._id,
-    }).session(session);
-
-    // Update the user's currentWorkspace if it matches the deleted workspace
-    if (user?.currentWorkspace?.equals(workspaceId)) {
-      const memberWorkspace = await MemberModel.findOne({ userId }).session(
-        session
-      );
-      // Update the user's currentWorkspace
-      user.currentWorkspace = memberWorkspace
-        ? memberWorkspace.workspaceId
+    // Update user's currentWorkspace if needed
+    if (user.currentWorkspace?.equals(workspaceId)) {
+      const fallbackWorkspace = await memberRepo.findOne({ userId }, session);
+      user.currentWorkspace = fallbackWorkspace
+        ? fallbackWorkspace.workspaceId
         : null;
-
       await user.save({ session });
     }
 
+    // Delete workspace
     await workspace.deleteOne({ session });
 
     await session.commitTransaction();
-
     session.endSession();
 
-    return {
-      currentWorkspace: user.currentWorkspace,
-    };
+    return { currentWorkspace: user.currentWorkspace };
   } catch (error) {
     await session.abortTransaction();
     session.endSession();

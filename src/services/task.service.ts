@@ -1,8 +1,14 @@
-import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
-import MemberModel from "../models/member.model";
-import ProjectModel from "../models/project.model";
-import TaskModel from "../models/task.model";
+import mongoose from "mongoose";
+import { TaskPriorityEnumType, TaskStatusEnumType } from "../enums/task.enum";
+import { MemberRepository } from "../repositories/member.repository";
+import { ProjectRepository } from "../repositories/project.repository";
+import { TaskRepository } from "../repositories/task.repository";
 import { BadRequestException, NotFoundException } from "../utils/appError";
+
+// Instantiate repositories
+const taskRepo = new TaskRepository();
+const projectRepo = new ProjectRepository();
+const memberRepo = new MemberRepository();
 
 export const createTaskService = async (
   workspaceId: string,
@@ -19,7 +25,7 @@ export const createTaskService = async (
 ) => {
   const { title, description, priority, status, assignedTo, dueDate } = body;
 
-  const project = await ProjectModel.findById(projectId);
+  const project = await projectRepo.findById(projectId);
 
   if (!project || project.workspace.toString() !== workspaceId.toString()) {
     throw new NotFoundException(
@@ -27,7 +33,7 @@ export const createTaskService = async (
     );
   }
   if (assignedTo) {
-    const isAssignedUserMember = await MemberModel.exists({
+    const isAssignedUserMember = await memberRepo.findOne({
       userId: assignedTo,
       workspaceId,
     });
@@ -36,19 +42,19 @@ export const createTaskService = async (
       throw new Error("Assigned user is not a member of this workspace.");
     }
   }
-  const task = new TaskModel({
+  const task = await taskRepo.create({
     title,
     description,
-    priority: priority || TaskPriorityEnum.MEDIUM,
-    status: status || TaskStatusEnum.TODO,
-    assignedTo,
-    createdBy: userId,
-    workspace: workspaceId,
-    project: projectId,
-    dueDate,
-  });
-
-  await task.save();
+    priority: priority as TaskPriorityEnumType,
+    status: status as TaskStatusEnumType,
+    assignedTo: assignedTo
+      ? new mongoose.Types.ObjectId(assignedTo)
+      : undefined,
+    createdBy: new mongoose.Types.ObjectId(userId),
+    workspace: new mongoose.Types.ObjectId(workspaceId),
+    project: new mongoose.Types.ObjectId(projectId),
+    dueDate: dueDate ? new Date(dueDate) : null,
+  } as any);
 
   return { task };
 };
@@ -66,7 +72,7 @@ export const updateTaskService = async (
     dueDate?: string;
   }
 ) => {
-  const project = await ProjectModel.findById(projectId);
+  const project = await projectRepo.findById(projectId);
 
   if (!project || project.workspace.toString() !== workspaceId.toString()) {
     throw new NotFoundException(
@@ -74,7 +80,7 @@ export const updateTaskService = async (
     );
   }
 
-  const task = await TaskModel.findById(taskId);
+  const task = await taskRepo.findById(taskId);
 
   if (!task || task.project.toString() !== projectId.toString()) {
     throw new NotFoundException(
@@ -82,13 +88,15 @@ export const updateTaskService = async (
     );
   }
 
-  const updatedTask = await TaskModel.findByIdAndUpdate(
-    taskId,
-    {
-      ...body,
-    },
-    { new: true }
-  );
+  const updatedTask = await taskRepo.update(taskId, {
+    ...body,
+    priority: body.priority as TaskPriorityEnumType,
+    status: body.status as TaskStatusEnumType,
+    assignedTo: body.assignedTo
+      ? new mongoose.Types.ObjectId(body.assignedTo)
+      : undefined,
+    dueDate: body.dueDate ? new Date(body.dueDate) : null,
+  } as any);
 
   if (!updatedTask) {
     throw new BadRequestException("Failed to update task");
@@ -112,62 +120,21 @@ export const getAllTasksService = async (
     pageNumber: number;
   }
 ) => {
-  const query: Record<string, any> = {
-    workspace: workspaceId,
-  };
+  const query: Record<string, any> = { workspace: workspaceId };
 
-  if (filters.projectId) {
-    query.project = filters.projectId;
-  }
-
-  if (filters.status && filters.status?.length > 0) {
-    query.status = { $in: filters.status };
-  }
-
-  if (filters.priority && filters.priority?.length > 0) {
-    query.priority = { $in: filters.priority };
-  }
-
-  if (filters.assignedTo && filters.assignedTo?.length > 0) {
+  if (filters.projectId) query.project = filters.projectId;
+  if (filters.status?.length) query.status = { $in: filters.status };
+  if (filters.priority?.length) query.priority = { $in: filters.priority };
+  if (filters.assignedTo?.length)
     query.assignedTo = { $in: filters.assignedTo };
-  }
+  if (filters.keyword) query.title = { $regex: filters.keyword, $options: "i" };
+  if (filters.dueDate) query.dueDate = { $eq: new Date(filters.dueDate) };
 
-  if (filters.keyword && filters.keyword !== undefined) {
-    query.title = { $regex: filters.keyword, $options: "i" };
-  }
-
-  if (filters.dueDate) {
-    query.dueDate = {
-      $eq: new Date(filters.dueDate),
-    };
-  }
-
-  //Pagination Setup
-  const { pageSize, pageNumber } = pagination;
-  const skip = (pageNumber - 1) * pageSize;
-
-  const [tasks, totalCount] = await Promise.all([
-    TaskModel.find(query)
-      .skip(skip)
-      .limit(pageSize)
-      .sort({ createdAt: -1 })
-      .populate("assignedTo", "_id name profilePicture -password")
-      .populate("project", "_id emoji name"),
-    TaskModel.countDocuments(query),
-  ]);
-
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  return {
-    tasks,
-    pagination: {
-      pageSize,
-      pageNumber,
-      totalCount,
-      totalPages,
-      skip,
-    },
-  };
+  return await taskRepo.findTasksWithFilters(
+    query,
+    pagination.pageSize,
+    pagination.pageNumber
+  );
 };
 
 export const getTaskByIdService = async (
@@ -175,7 +142,7 @@ export const getTaskByIdService = async (
   projectId: string,
   taskId: string
 ) => {
-  const project = await ProjectModel.findById(projectId);
+  const project = await projectRepo.findById(projectId);
 
   if (!project || project.workspace.toString() !== workspaceId.toString()) {
     throw new NotFoundException(
@@ -183,11 +150,11 @@ export const getTaskByIdService = async (
     );
   }
 
-  const task = await TaskModel.findOne({
-    _id: taskId,
-    workspace: workspaceId,
-    project: projectId,
-  }).populate("assignedTo", "_id name profilePicture -password");
+  const task = await taskRepo.findTaskByWorkspaceProject(
+    workspaceId,
+    projectId,
+    taskId
+  );
 
   if (!task) {
     throw new NotFoundException("Task not found.");
@@ -200,10 +167,7 @@ export const deleteTaskService = async (
   workspaceId: string,
   taskId: string
 ) => {
-  const task = await TaskModel.findOneAndDelete({
-    _id: taskId,
-    workspace: workspaceId,
-  });
+  const task = await taskRepo.deleteTaskByWorkspace(workspaceId, taskId);
 
   if (!task) {
     throw new NotFoundException(

@@ -1,27 +1,29 @@
 import { ErrorCodeEnum } from "../enums/error-code.enum";
 import { Roles } from "../enums/role.enum";
-import MemberModel from "../models/member.model";
-import RoleModel from "../models/roles-permission.model";
-import WorkspaceModel from "../models/workspace.model";
+import { MemberRepository } from "../repositories/member.repository";
+import { RoleRepository } from "../repositories/role.repository";
+import { WorkspaceRepository } from "../repositories/workspace.repository";
 import {
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
 } from "../utils/appError";
 
+// Instantiate repositories
+const memberRepo = new MemberRepository();
+const workspaceRepo = new WorkspaceRepository();
+const roleRepo = new RoleRepository();
+
 export const getMemberRoleInWorkspace = async (
   userId: string,
   workspaceId: string
 ) => {
-  const workspace = await WorkspaceModel.findById(workspaceId);
+  const workspace = await workspaceRepo.findById(workspaceId);
   if (!workspace) {
     throw new NotFoundException("Workspace not found");
   }
 
-  const member = await MemberModel.findOne({
-    userId,
-    workspaceId,
-  }).populate("role");
+  const member = await memberRepo.findMemberWithRole(userId, workspaceId);
 
   if (!member) {
     throw new UnauthorizedException(
@@ -40,34 +42,31 @@ export const joinWorkspaceByInviteService = async (
   inviteCode: string
 ) => {
   // Find workspace by invite code
-  const workspace = await WorkspaceModel.findOne({ inviteCode }).exec();
+  const workspace = await workspaceRepo.findOne({
+    inviteCode,
+  });
+
   if (!workspace) {
     throw new NotFoundException("Invalid invite code or workspace not found");
   }
 
-  // Check if user is already a member
-  const existingMember = await MemberModel.findOne({
+  const existingMember = await memberRepo.isUserAlreadyMember(
     userId,
-    workspaceId: workspace._id,
-  }).exec();
+    workspace._id
+  );
 
   if (existingMember) {
     throw new BadRequestException("You are already a member of this workspace");
   }
 
-  const role = await RoleModel.findOne({ name: Roles.MEMBER });
+  const role = await roleRepo.findOne({ name: Roles.MEMBER });
 
   if (!role) {
     throw new NotFoundException("Role not found");
   }
 
   // Add user to workspace as a member
-  const newMember = new MemberModel({
-    userId,
-    workspaceId: workspace._id,
-    role: role._id,
-  });
-  await newMember.save();
+  await memberRepo.addMemberToWorkspace(userId, workspace._id, role._id);
 
   return { workspaceId: workspace._id, role: role.name };
 };

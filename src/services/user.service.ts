@@ -1,10 +1,11 @@
-import UserModel from "../models/user.model";
+import { UserRepository } from "../repositories/user.repository";
 import { BadRequestException } from "../utils/appError";
 
+// Instantiate repository
+const userRepo = new UserRepository();
+
 export const getCurrentUserService = async (userId: string) => {
-  const user = await UserModel.findById(userId)
-    .populate("currentWorkspace")
-    .select("-password");
+  const user = await userRepo.findByIdWithWorkspace(userId);
 
   if (!user) {
     throw new BadRequestException("User not found");

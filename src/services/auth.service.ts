@@ -11,6 +11,18 @@ import {
 } from "../utils/appError";
 import MemberModel from "../models/member.model";
 import { ProviderEnum } from "../enums/account-provider.enum";
+import { UserRepository } from "../repositories/user.repository";
+import { WorkspaceRepository } from "../repositories/workspace.repository";
+import { RoleRepository } from "../repositories/role.repository";
+import { MemberRepository } from "../repositories/member.repository";
+import { AccountRepository } from "../repositories/account.repository";
+
+// Instantiate repositories
+const userRepo = new UserRepository();
+const accountRepo = new AccountRepository();
+const workspaceRepo = new WorkspaceRepository();
+const roleRepo = new RoleRepository();
+const memberRepo = new MemberRepository();
 
 export const loginOrCreateAccountService = async (data: {
   provider: string;
@@ -22,66 +34,70 @@ export const loginOrCreateAccountService = async (data: {
   const { providerId, provider, displayName, email, picture } = data;
 
   const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    session.startTransaction();
     console.log("Started Session...");
 
-    let user = await UserModel.findOne({ email }).session(session);
+    let user = await userRepo.findOne({ email }, session);
 
     if (!user) {
-      // Create a new user if it doesn't exist
-      user = new UserModel({
-        email,
-        name: displayName,
-        profilePicture: picture || null,
-      });
-      await user.save({ session });
+      // Create new user
+      user = await userRepo.create(
+        {
+          email,
+          name: displayName,
+          profilePicture: picture || null,
+        } as any,
+        session
+      );
 
-      const account = new AccountModel({
-        userId: user._id,
-        provider: provider,
-        providerId: providerId,
-      });
-      await account.save({ session });
+      // Create account
+      await accountRepo.create(
+        {
+          userId: user._id,
+          provider,
+          providerId,
+        } as any,
+        session
+      );
 
-      // 3. Create a new workspace for the new user
-      const workspace = new WorkspaceModel({
-        name: `My Workspace`,
-        description: `Workspace created for ${user.name}`,
-        owner: user._id,
-      });
-      await workspace.save({ session });
+      // Create a new workspace
+      const workspace = await workspaceRepo.create(
+        {
+          name: `My Workspace`,
+          description: `Workspace created for ${user.name}`,
+          owner: user._id,
+        } as any,
+        session
+      );
 
-      const ownerRole = await RoleModel.findOne({
-        name: Roles.OWNER,
-      }).session(session);
-
+      // Fetch OWNER role
+      const ownerRole = await roleRepo.findOne({ name: Roles.OWNER }, session);
       if (!ownerRole) {
         throw new NotFoundException("Owner role not found");
       }
 
-      const member = new MemberModel({
-        userId: user._id,
-        workspaceId: workspace._id,
-        role: ownerRole._id,
-        joinedAt: new Date(),
-      });
-      await member.save({ session });
+      // Add user as a member
+      await memberRepo.addMemberToWorkspace(
+        user._id,
+        workspace._id,
+        ownerRole._id,
+        session
+      );
 
+      // Set current workspace and save user
       user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
-      await user.save({ session });
+      await userRepo.save(user, session);
 
       console.log("user created : ", user);
     }
-    await session.commitTransaction();
-    session.endSession();
-    console.log("End Session...");
 
+    await session.commitTransaction();
+    console.log("End Session...");
     return { user };
   } catch (error) {
     await session.abortTransaction();
-    session.endSession();
     throw error;
   } finally {
     session.endSession();
@@ -94,56 +110,60 @@ export const registerUserService = async (body: {
   password: string;
 }) => {
   const { email, name, password } = body;
+
   const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    session.startTransaction();
-
-    const existingUser = await UserModel.findOne({ email }).session(session);
+    // Check if user already exists
+    const existingUser = await userRepo.findOne({ email }, session);
     if (existingUser) {
       throw new BadRequestException("Email already exists");
     }
 
-    const user = new UserModel({
-      email,
-      name,
-      password,
-    });
-    await user.save({ session });
+    // Create user
+    const user = await userRepo.create(
+      { email, name, password } as any,
+      session
+    );
 
-    const account = new AccountModel({
-      userId: user._id,
-      provider: ProviderEnum.EMAIL,
-      providerId: email,
-    });
-    await account.save({ session });
+    // Create account
+    await accountRepo.create(
+      {
+        userId: user._id,
+        provider: ProviderEnum.EMAIL,
+        providerId: email,
+      } as any,
+      session
+    );
 
-    // 3. Create a new workspace for the new user
-    const workspace = new WorkspaceModel({
-      name: `My Workspace`,
-      description: `Workspace created for ${user.name}`,
-      owner: user._id,
-    });
-    await workspace.save({ session });
+    // Create workspace
+    const workspace = await workspaceRepo.create(
+      {
+        name: `My Workspace`,
+        description: `Workspace created for ${user.name}`,
+        owner: user._id,
+      } as any,
+      session
+    );
 
-    const ownerRole = await RoleModel.findOne({
-      name: Roles.OWNER,
-    }).session(session);
-
+    // Fetch OWNER role
+    const ownerRole = await roleRepo.findOne({ name: Roles.OWNER }, session);
     if (!ownerRole) {
       throw new NotFoundException("Owner role not found");
     }
 
-    const member = new MemberModel({
-      userId: user._id,
-      workspaceId: workspace._id,
-      role: ownerRole._id,
-      joinedAt: new Date(),
-    });
-    await member.save({ session });
+    // Add user to workspace as member
+    await memberRepo.addMemberToWorkspace(
+      user._id,
+      workspace._id,
+      ownerRole._id,
+      session
+    );
 
+    // Set currentWorkspace and save user
     user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
-    await user.save({ session });
+    await userRepo.save(user, session);
 
     await session.commitTransaction();
     session.endSession();
@@ -156,7 +176,6 @@ export const registerUserService = async (body: {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-
     throw error;
   }
 };
@@ -170,17 +189,23 @@ export const verifyUserService = async ({
   password: string;
   provider?: string;
 }) => {
-  const account = await AccountModel.findOne({ provider, providerId: email });
+  // Find account
+  const account = await accountRepo.findOne({
+    provider,
+    providerId: email,
+  });
+
   if (!account) {
     throw new NotFoundException("Invalid email or password");
   }
 
-  const user = await UserModel.findById(account.userId);
-
+  // Find user
+  const user = await userRepo.findById(account.userId);
   if (!user) {
     throw new NotFoundException("User not found for the given account");
   }
 
+  // Check password
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new UnauthorizedException("Invalid email or password");

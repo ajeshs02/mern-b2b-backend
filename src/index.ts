@@ -55,7 +55,6 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Add global cache
 app.use(globalCache);
 
 app.use(`${BASE_PATH}/auth`, authRoutes);

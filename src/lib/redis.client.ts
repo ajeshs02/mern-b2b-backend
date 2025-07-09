@@ -8,7 +8,7 @@ const client = createClient({
 });
 
 client.on("connect", () => {
-  logger.info(`✅ Redis connecting to ${redisConfig.url}...`);
+  logger.info(`Redis connecting to ${redisConfig.url}...`);
 });
 
 client.on("ready", () => {
@@ -30,7 +30,7 @@ export const connectRedis = async (): Promise<void> => {
     await client.connect();
 
     if (client.isReady) {
-      logger.info("✅ Redis connection established and ready");
+      logger.info("Redis connection established and ready");
     } else {
       logger.warn("⚠️ Redis client is not ready after connect()");
     }
